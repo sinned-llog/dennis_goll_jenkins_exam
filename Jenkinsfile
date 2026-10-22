@@ -123,7 +123,7 @@ pipeline {
                       --set cast.tag="$DOCKER_TAG" \
                       --set movie.tag="$DOCKER_TAG" \
                       --wait \
-                      --timeout 5m
+                      --timeout 2m
                 '''
             }
         }
