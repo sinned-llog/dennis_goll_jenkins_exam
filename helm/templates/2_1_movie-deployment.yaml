@@ -24,7 +24,7 @@ spec:
       containers:
         - name: movie-service
 
-          image: "{{ .Values.movie.repository }}:{{ Values.movie.tag }}"
+          image: "{{ .Values.movie.repository }}:{{ .Values.movie.tag }}"
 
           imagePullPolicy: {{ .Values.movie.pullPolicy }}
 

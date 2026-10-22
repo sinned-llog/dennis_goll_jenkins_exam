@@ -1,117 +1,220 @@
 pipeline {
-environment { 
-DOCKER_ID = "sinnedllog" 
-DOCKER_IMAGE_CAST = "exam_cast"
-DOCKER_IMAGE_MOVIE = "exam_movie"
-DOCKER_TAG = "v.${BUILD_ID}.0" // we will tag our images with the current build in order to increment the value by 1 with each new build
-}
-agent any 
-stages {
-  stage(' Docker Build'){ // docker build image stage
-    steps {
-      script {
-        sh '''
-          docker build -t $DOCKER_ID/$DOCKER_IMAGE_CAST:$DOCKER_TAG ./cast-service
-          docker build -t $DOCKER_ID/$DOCKER_IMAGE_MOVIE:$DOCKER_TAG ./movie-service
-          sleep 6
-        '''
-      }
-    }
-  }
-  stage('Docker compose test'){ // test docker compose up and turn it off again
-    steps {
-      script {
-      sh '''
-        docker compose up -d
 
-        curl --fail http://localhost:8080/api/v1/casts
-        curl --fail http://localhost:8080/api/v1/movies
+    agent any
 
-        docker compose down
-
-        sleep 6
-      '''
-      }
-    }
-  }
-  
-  stage('Docker Push'){ //pass the built image to our docker hub account
-    environment
-    {
-      DOCKER_PASS = credentials("DOCKER_HUB_PASS") // we retrieve  docker password from secret text called docker_hub_pass saved on jenkins
-    }
-    steps {
-      script {
-        sh '''
-          docker login -u $DOCKER_ID -p $DOCKER_PASS
-
-          docker push $DOCKER_ID/$DOCKER_IMAGE_CAST:$DOCKER_TAG
-          docker push $DOCKER_ID/$DOCKER_IMAGE_MOVIES:$DOCKER_TAG
-        '''
-      }
-    }
-  }
-  stage('Deployment in dev'){
     environment {
-    KUBECONFIG = credentials("config") // we retrieve  kubeconfig from secret file called config saved on jenkins
+        DOCKER_ID = "sinnedllog"
+        DOCKER_IMAGE_CAST = "exam_cast"
+        DOCKER_IMAGE_MOVIE = "exam_movie"
+        DOCKER_TAG = "v.${BUILD_ID}.0"
     }
-    steps {
-      script {
-        sh '''
-        rm -Rf ~/.kube
-        mkdir ~/.kube
-        ls
-        cat $KUBECONFIG > ~/.kube/config
-        cp fastapi/values.yaml values.yml
-        cat values.yml
-        sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-        helm upgrade --install app fastapi --values=values.yml --namespace dev
-        '''
-      }
-    }
-  }
-  stage('Deployment in staging'){
-    environment {
-    KUBECONFIG = credentials("config") // we retrieve  kubeconfig from secret file called config saved on jenkins
-    }
-    steps {
-      script {
-      sh '''
-      rm -Rf ~/.kube
-      mkdir ~/.kube
-      ls
-      cat $KUBECONFIG > ~/.kube/config
-      cp fastapi/values.yaml values.yml
-      cat values.yml
-      sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-      helm upgrade --install app fastapi --values=values.yml --namespace staging
-      '''
-      }
-    }
-  }
-  stage('Deployment in prod'){
-    environment {
-      KUBECONFIG = credentials("config") // we retrieve  kubeconfig from secret file called config saved on jenkins
-      }
-      steps {
-        // Create an Approval Button with a timeout of 15minutes.
-        // this require a manuel validation in order to deploy on production environment
-        timeout(time: 15, unit: "MINUTES") {
-          input message: 'Do you want to deploy in production ?', ok: 'Yes'
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+
+                sh '''
+                    pwd
+                    ls -la
+                '''
+            }
         }
-        script {
-          sh '''
-          rm -Rf ~/.kube
-          mkdir ~/.kube
-          ls
-          cat $KUBECONFIG > ~/.kube/config
-          cp fastapi/values.yaml values.yml
-          cat values.yml
-          sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-          helm upgrade --install app fastapi --values=values.yml --namespace prod
-          '''
+
+        stage('Validate Helm') {
+            steps {
+                sh '''
+                    set -eu
+
+                    helm lint ./helm
+
+                    helm template exam ./helm \
+                      --set cast.tag="$DOCKER_TAG" \
+                      --set movie.tag="$DOCKER_TAG" \
+                      > rendered.yaml
+
+                    kubectl apply \
+                      --dry-run=client \
+                      -f rendered.yaml
+
+                    echo "Images in rendered Helm manifests:"
+                    grep -n "image:" rendered.yaml
+                '''
+            }
         }
-      }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    set -eu
+
+                    docker build \
+                      -t "$DOCKER_ID/$DOCKER_IMAGE_CAST:$DOCKER_TAG" \
+                      ./cast-service
+
+                    docker build \
+                      -t "$DOCKER_ID/$DOCKER_IMAGE_MOVIE:$DOCKER_TAG" \
+                      ./movie-service
+                '''
+            }
+        }
+
+        stage('Docker Push') {
+            environment {
+                DOCKER_PASS = credentials('DOCKER_HUB_PASS')
+            }
+
+            steps {
+                sh '''
+                    set -eu
+
+                    echo "$DOCKER_PASS" | docker login \
+                      --username "$DOCKER_ID" \
+                      --password-stdin
+
+                    docker push \
+                      "$DOCKER_ID/$DOCKER_IMAGE_CAST:$DOCKER_TAG"
+
+                    docker push \
+                      "$DOCKER_ID/$DOCKER_IMAGE_MOVIE:$DOCKER_TAG"
+                '''
+            }
+        }
+
+        stage('Prepare DEV') {
+            environment {
+                KUBECONFIG = credentials('config')
+                DOCKER_PASS = credentials('DOCKER_HUB_PASS')
+            }
+
+            steps {
+                sh '''
+                    set -eu
+
+                    kubectl create namespace dev \
+                      --dry-run=client \
+                      -o yaml \
+                      | kubectl apply -f -
+
+                    kubectl create secret docker-registry regcred \
+                      --docker-server=https://index.docker.io/v1/ \
+                      --docker-username="$DOCKER_ID" \
+                      --docker-password="$DOCKER_PASS" \
+                      --namespace dev \
+                      --dry-run=client \
+                      -o yaml \
+                      | kubectl apply -f -
+                '''
+            }
+        }
+
+        stage('Deploy DEV') {
+            environment {
+                KUBECONFIG = credentials('config')
+            }
+
+            steps {
+                sh '''
+                    set -eu
+
+                    helm upgrade --install exam ./helm \
+                      --namespace dev \
+                      --set cast.tag="$DOCKER_TAG" \
+                      --set movie.tag="$DOCKER_TAG" \
+                      --wait \
+                      --timeout 5m
+                '''
+            }
+        }
+
+        stage('Check DEV') {
+            environment {
+                KUBECONFIG = credentials('config')
+            }
+
+            steps {
+                sh '''
+                    set -eu
+
+                    kubectl get pods -n dev
+                    kubectl get services -n dev
+                    kubectl get deployments -n dev
+                    kubectl get statefulsets -n dev
+
+                    kubectl rollout status \
+                      statefulset/cast-db \
+                      -n dev \
+                      --timeout=180s
+
+                    kubectl rollout status \
+                      statefulset/movie-db \
+                      -n dev \
+                      --timeout=180s
+
+                    kubectl rollout status \
+                      deployment/cast-service \
+                      -n dev \
+                      --timeout=180s
+
+                    kubectl rollout status \
+                      deployment/movie-service \
+                      -n dev \
+                      --timeout=180s
+                '''
+            }
+        }
+
+        stage('Test DEV APIs') {
+            environment {
+                KUBECONFIG = credentials('config')
+            }
+
+            steps {
+                sh '''
+                    set -eu
+
+                    kubectl port-forward \
+                      service/cast-service \
+                      18002:8000 \
+                      -n dev \
+                      > /tmp/cast-forward.log 2>&1 &
+
+                    CAST_PID=$!
+
+                    kubectl port-forward \
+                      service/movie-service \
+                      18001:8000 \
+                      -n dev \
+                      > /tmp/movie-forward.log 2>&1 &
+
+                    MOVIE_PID=$!
+
+                    cleanup() {
+                        kill "$CAST_PID" "$MOVIE_PID" 2>/dev/null || true
+                    }
+
+                    trap cleanup EXIT
+
+                    sleep 5
+
+                    curl --fail --show-error \
+                      http://127.0.0.1:18002/api/v1/casts
+
+                    curl --fail --show-error \
+                      http://127.0.0.1:18001/api/v1/movies
+                '''
+            }
+        }
     }
-  }
+
+    post {
+        success {
+            echo "DEV deployment and API tests succeeded."
+        }
+
+        failure {
+            echo "Pipeline failed. Check the failed stage."
+        }
+    }
 }

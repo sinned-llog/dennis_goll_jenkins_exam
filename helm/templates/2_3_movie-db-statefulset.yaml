@@ -22,7 +22,7 @@ spec:
       containers:
         - name: postgres
 
-          image: postgres:12.1-alpine
+          image: {{ .Values.movieDb.image}}
 
           ports:
             - containerPort: 5432
@@ -51,4 +51,4 @@ spec:
 
         resources:
           requests:
-            storage: 1Gi
+            storage: {{ .Values.movieDb.storage}}
