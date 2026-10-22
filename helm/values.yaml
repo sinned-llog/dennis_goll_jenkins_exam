@@ -5,7 +5,7 @@
 replicaCount: 3
 
 movie:
-  repository: sinnedllog/exam_movies
+  repository: sinnedllog/exam_movie
   tag: latest
   pullPolicy: IfNotPresent
 
