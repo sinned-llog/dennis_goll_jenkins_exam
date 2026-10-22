@@ -1,0 +1,43 @@
+# Default values for fastapiapp.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 3
+
+movie:
+  repository: sinnedllog/exam_movies
+  tag: latest
+  pullPolicy: IfNotPresent
+
+cast:
+  repository: sinnedllog/exam_cast
+  tag: latest
+  pullPolicy: IfNotPresent
+
+movieDb:
+  image: postgres:12.1-alpine
+  storage: 1Gi
+
+castDb:
+  image: postgres:12.1-alpine
+  storage: 1Gi
+
+imagePullSecrets: 
+  - name: "regcred"
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  # Annotations to add to the service account
+
+ingress:
+  enabled: true
+  className: nginx
+  
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+

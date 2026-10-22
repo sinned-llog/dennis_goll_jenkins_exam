@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: movie-service
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    matchLabels:
+      app: movie-service
+
+  template:
+    metadata:
+      labels:
+        app: movie-service
+
+    spec:
+
+      imagePullSecrets:
+        - name: regcred
+
+      containers:
+        - name: movie-service
+
+          image: "{{ .Values.movie.repository }}:{{ Values.movie.tag }}"
+
+          imagePullPolicy: {{ .Values.movie.pullPolicy }}
+
+          ports:
+            - containerPort: 8000
+
+          env:
+            - name: DATABASE_URI
+              value: "postgresql://movie_db_username:movie_db_password@movie-db/movie_db_dev"
+
+          livenessProbe:
+            httpGet:
+              path: /api/v1/checkapi
+              port: 8000
+
+          readinessProbe:
+            httpGet:
+              path: /api/v1/checkapi
+              port: 8000
