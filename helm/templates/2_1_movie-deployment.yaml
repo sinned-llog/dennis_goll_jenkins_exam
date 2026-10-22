@@ -37,10 +37,10 @@ spec:
 
           livenessProbe:
             httpGet:
-              path: /api/v1/checkapi
+              path: /health
               port: 8000
 
           readinessProbe:
             httpGet:
-              path: /api/v1/checkapi
+              path: /health
               port: 8000
