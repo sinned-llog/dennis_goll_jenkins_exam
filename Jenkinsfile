@@ -337,7 +337,7 @@ pipeline {
         stage('Prepare QA') {
             steps {
                 script {
-                    prepareEnvironment('QA')
+                    prepareEnvironment('qa')
                 }
             }
         }
@@ -345,7 +345,7 @@ pipeline {
         stage('Deploy QA') {
             steps {
                 script{
-                    deployEnvironment('QA')
+                    deployEnvironment('qa')
                 }
             }
         }
@@ -353,7 +353,7 @@ pipeline {
         stage('Validate QA') {
             steps {
                 script {
-                    validateEnvironment('QA')
+                    validateEnvironment('qa')
                 }
             }
         }
