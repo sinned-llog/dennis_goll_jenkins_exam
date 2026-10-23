@@ -56,7 +56,7 @@ def deployEnvironment(String environmentName) {
             helm upgrade --install "${releaseName}" ./helm \
                       --namespace "${environmentName}" \
                       --set-string cast.tag="${env.DOCKER_TAG}" \
-                      --set-string movie.tag="${env.$DOCKER_TAG}" \
+                      --set-string movie.tag="${env.DOCKER_TAG}" \
                       --wait \
                       --timeout 2m
             
