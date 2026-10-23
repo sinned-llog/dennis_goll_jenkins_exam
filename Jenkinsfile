@@ -333,5 +333,84 @@ pipeline {
                 }
             }
         }
+
+        stage('Prepare QA') {
+            steps {
+                script {
+                    prepareEnvironment('QA')
+                }
+            }
+        }
+
+        stage('Deploy QA') {
+            steps {
+                script{
+                    deployEnvironment('QA')
+                }
+            }
+        }
+
+        stage('Validate QA') {
+            steps {
+                script {
+                    validateEnvironment('QA')
+                }
+            }
+        }
+
+        stage('Prepare STAGING') {
+            steps {
+                script {
+                    prepareEnvironment('staging')
+                }
+            }
+        }
+
+        stage('Deploy STAGING') {
+            steps {
+                script{
+                    deployEnvironment('staging')
+                }
+            }
+        }
+
+        stage('Validate STAGING') {
+            steps {
+                script {
+                    validateEnvironment('staging')
+                }
+            }
+        }
+
+        stage('Prepare PROD') {
+            steps {
+                script {
+                    prepareEnvironment('prod')
+                }
+            }
+        }
+
+        stage('Deploy PROD') {
+            steps {
+                script{
+                    deployEnvironment('prod')
+                }
+            }
+        }
+
+        stage('Validate PROD') {
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                    input(
+                        message: "Do you want to deploy image ${DOCKER_TAG} to production?",
+                        ok: 'Deploy PROD'
+                    )
+                }
+                script {
+                    validateEnvironment('prod')
+                }
+            }
+        }
+
     }
 }
